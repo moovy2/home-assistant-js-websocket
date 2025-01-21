@@ -41,6 +41,7 @@ export type HassConfig = {
   latitude: number;
   longitude: number;
   elevation: number;
+  radius: number;
   unit_system: {
     length: string;
     mass: string;
@@ -58,11 +59,14 @@ export type HassConfig = {
   allowlist_external_urls: string[];
   version: string;
   config_source: string;
+  recovery_mode: boolean;
   safe_mode: boolean;
   state: "NOT_RUNNING" | "STARTING" | "RUNNING" | "STOPPING" | "FINAL_WRITE";
   external_url: string | null;
   internal_url: string | null;
   currency: string;
+  country: string | null;
+  language: string;
 };
 
 export type HassEntityBase = {
@@ -99,12 +103,21 @@ export type HassService = {
   target?: {} | null;
   fields: {
     [field_name: string]: {
+      example?: string | boolean | number;
+      default?: unknown;
+      required?: boolean;
+      advanced?: boolean;
+      selector?: {};
+      filter?: {
+        supported_features?: number[];
+        attribute?: Record<string, any[]>;
+      };
+      // Custom integrations don't use translations and still have name/description
       name?: string;
       description: string;
-      example: string | boolean | number;
-      selector?: {};
     };
   };
+  response?: { optional: boolean };
 };
 
 export type HassDomainServices = {
@@ -126,4 +139,6 @@ export type HassServiceTarget = {
   entity_id?: string | string[];
   device_id?: string | string[];
   area_id?: string | string[];
+  floor_id?: string | string[];
+  label_id?: string | string[];
 };

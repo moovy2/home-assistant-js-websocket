@@ -26,10 +26,13 @@ export const getCollection = <State>(
   fetchCollection: ((conn: Connection) => Promise<State>) | undefined,
   subscribeUpdates?: (
     conn: Connection,
-    store: Store<State>
-  ) => Promise<UnsubscribeFunc>
+    store: Store<State>,
+  ) => Promise<UnsubscribeFunc>,
+  options: { unsubGrace: boolean } = { unsubGrace: true },
 ): Collection<State> => {
+  // @ts-ignore
   if (conn[key]) {
+    // @ts-ignore
     return conn[key];
   }
 
@@ -93,6 +96,7 @@ export const getCollection = <State>(
       unsubProm.then((unsub) => {
         unsub();
       });
+    store.clearState();
     conn.removeEventListener("ready", refresh);
     conn.removeEventListener("disconnected", handleDisconnect);
   };
@@ -113,6 +117,7 @@ export const getCollection = <State>(
     }
   };
 
+  // @ts-ignore
   conn[key] = {
     get state() {
       return store.state;
@@ -149,12 +154,15 @@ export const getCollection = <State>(
         }
 
         if (!active) {
-          scheduleTeardownUpdateSubscription();
+          options.unsubGrace
+            ? scheduleTeardownUpdateSubscription()
+            : teardownUpdateSubscription();
         }
       };
     },
   };
 
+  // @ts-ignore
   return conn[key];
 };
 
@@ -166,8 +174,8 @@ export const createCollection = <State>(
     | ((conn: Connection, store: Store<State>) => Promise<UnsubscribeFunc>)
     | undefined,
   conn: Connection,
-  onChange: (state: State) => void
+  onChange: (state: State) => void,
 ): UnsubscribeFunc =>
   getCollection(conn, key, fetchCollection, subscribeUpdates).subscribe(
-    onChange
+    onChange,
   );
