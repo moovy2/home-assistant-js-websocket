@@ -2,6 +2,7 @@ import { parseQuery } from "./util.js";
 import {
   ERR_HASS_HOST_REQUIRED,
   ERR_INVALID_AUTH,
+  ERR_INVALID_AUTH_CALLBACK,
   ERR_INVALID_HTTPS_TO_HTTP,
 } from "./errors.js";
 
@@ -24,6 +25,7 @@ export type getAuthOptions = {
   authCode?: string;
   saveTokens?: SaveTokensFunc;
   loadTokens?: LoadTokensFunc;
+  limitHassInstance?: boolean;
 };
 
 type QueryCallbackData =
@@ -66,10 +68,10 @@ function genAuthorizeUrl(
   hassUrl: string,
   clientId: string | null,
   redirectUrl: string,
-  state: string
+  state: string,
 ) {
   let authorizeUrl = `${hassUrl}/auth/authorize?response_type=code&redirect_uri=${encodeURIComponent(
-    redirectUrl
+    redirectUrl,
   )}`;
 
   if (clientId !== null) {
@@ -86,7 +88,7 @@ function redirectAuthorize(
   hassUrl: string,
   clientId: string | null,
   redirectUrl: string,
-  state: string
+  state: string,
 ) {
   // Add either ?auth_callback=1 or &auth_callback=1
   redirectUrl += (redirectUrl.includes("?") ? "&" : "?") + "auth_callback=1";
@@ -95,14 +97,14 @@ function redirectAuthorize(
     hassUrl,
     clientId,
     redirectUrl,
-    state
+    state,
   );
 }
 
 async function tokenRequest(
   hassUrl: string,
   clientId: string | null,
-  data: AuthorizationCodeRequest | RefreshTokenRequest
+  data: AuthorizationCodeRequest | RefreshTokenRequest,
 ) {
   // Browsers don't allow fetching tokens from https -> http.
   // Throw an error because it's a pain to debug this.
@@ -122,6 +124,7 @@ async function tokenRequest(
     formData.append("client_id", clientId);
   }
   Object.keys(data).forEach((key) => {
+    // @ts-ignore
     formData.append(key, data[key]);
   });
 
@@ -205,11 +208,10 @@ export class Auth {
     if (!this.data.refresh_token) throw new Error("No refresh_token to revoke");
 
     const formData = new FormData();
-    formData.append("action", "revoke");
     formData.append("token", this.data.refresh_token);
 
     // There is no error checking, as revoke will always return 200
-    await fetch(`${this.data.hassUrl}/auth/token`, {
+    await fetch(`${this.data.hassUrl}/auth/revoke`, {
       method: "POST",
       credentials: "same-origin",
       body: formData,
@@ -223,7 +225,7 @@ export class Auth {
 
 export function createLongLivedTokenAuth(
   hassUrl: string,
-  access_token: string
+  access_token: string,
 ) {
   return new Auth({
     hassUrl,
@@ -245,9 +247,10 @@ export async function getAuth(options: getAuthOptions = {}): Promise<Auth> {
   }
   const clientId =
     options.clientId !== undefined ? options.clientId : genClientId();
+  const limitHassInstance = options.limitHassInstance === true;
 
   // Use auth code if it was passed in
-  if (!data && options.authCode && hassUrl) {
+  if (options.authCode && hassUrl) {
     data = await fetchToken(hassUrl, clientId, options.authCode);
     if (options.saveTokens) {
       options.saveTokens(data);
@@ -262,6 +265,14 @@ export async function getAuth(options: getAuthOptions = {}): Promise<Auth> {
     if ("auth_callback" in query) {
       // Restore state
       const state = decodeOAuthState(query.state);
+
+      if (
+        limitHassInstance &&
+        (state.hassUrl !== hassUrl || state.clientId !== clientId)
+      ) {
+        throw ERR_INVALID_AUTH_CALLBACK;
+      }
+
       data = await fetchToken(state.hassUrl, state.clientId, query.code);
       if (options.saveTokens) {
         options.saveTokens(data);
@@ -290,7 +301,7 @@ export async function getAuth(options: getAuthOptions = {}): Promise<Auth> {
     encodeOAuthState({
       hassUrl,
       clientId,
-    })
+    }),
   );
   // Just don't resolve while we navigate to next page
   return new Promise<Auth>(() => {});

@@ -9,6 +9,7 @@ import {
 import { Error } from "./types.js";
 import type { ConnectionOptions } from "./connection.js";
 import * as messages from "./messages.js";
+import { atLeastHaVersion } from "./util.js";
 
 const DEBUG = false;
 
@@ -35,7 +36,7 @@ export function createSocket(options: ConnectionOptions): Promise<HaWebSocket> {
         },
         () => {
           authRefreshTask = undefined;
-        }
+        },
       )
     : undefined;
 
@@ -49,7 +50,7 @@ export function createSocket(options: ConnectionOptions): Promise<HaWebSocket> {
   function connect(
     triesLeft: number,
     promResolve: (socket: HaWebSocket) => void,
-    promReject: (err: Error) => void
+    promReject: (err: Error) => void,
   ) {
     if (DEBUG) {
       console.log("[Auth Phase] New connection", url);
@@ -112,6 +113,10 @@ export function createSocket(options: ConnectionOptions): Promise<HaWebSocket> {
           socket.removeEventListener("close", closeMessage);
           socket.removeEventListener("error", closeMessage);
           socket.haVersion = message.ha_version;
+          if (atLeastHaVersion(socket.haVersion, 2022, 9)) {
+            socket.send(JSON.stringify(messages.supportedFeatures()));
+          }
+
           promResolve(socket);
           break;
 
@@ -132,6 +137,6 @@ export function createSocket(options: ConnectionOptions): Promise<HaWebSocket> {
   }
 
   return new Promise((resolve, reject) =>
-    connect(options.setupRetry, resolve, reject)
+    connect(options.setupRetry, resolve, reject),
   );
 }

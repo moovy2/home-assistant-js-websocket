@@ -7,6 +7,14 @@ export function auth(accessToken: string) {
   };
 }
 
+export function supportedFeatures() {
+  return {
+    type: "supported_features",
+    id: 1, // Always the first message after auth
+    features: { coalesce_messages: 1 },
+  };
+}
+
 export function states() {
   return {
     type: "get_states",
@@ -37,19 +45,22 @@ type ServiceCallMessage = {
   service: string;
   service_data?: object;
   target?: HassServiceTarget;
+  return_response?: boolean;
 };
 
 export function callService(
   domain: string,
   service: string,
   serviceData?: object,
-  target?: HassServiceTarget
+  target?: HassServiceTarget,
+  returnResponse?: boolean,
 ) {
   const message: ServiceCallMessage = {
     type: "call_service",
     domain,
     service,
     target,
+    return_response: returnResponse,
   };
 
   if (serviceData) {
